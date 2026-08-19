@@ -8,7 +8,9 @@ extends "_.gd"
 
 const ImportalityOptions = preload("../options.gd")
 const SCHEMA := "importality.krita.layers/v2"
-const VISIBILITY_META_KEY := &"importality.krita.layers.visibility_rules"
+# Godot Object metadata names must be valid identifiers; the on-disk manifest
+# keeps its richer `visibility_rules` namespace separately.
+const VISIBILITY_META_KEY := &"importality_krita_layers_visibility_rules"
 const DIRECTIONS: Array[String] = ["forward", "reverse", "ping_pong", "ping_pong_reverse"]
 static var _LOGICAL_NAME_REGEX := RegEx.create_from_string("^[\\p{L}\\p{N}_][\\p{L}\\p{N}_ -]*$")
 static var _SHA256_REGEX := RegEx.create_from_string("^[0-9a-f]{64}$")
