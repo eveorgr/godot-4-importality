@@ -28,6 +28,8 @@ const STANDALONE_IMAGE_FORMAT_LOADER_EXTENSIONS: Array[GDScript] = [
 ]
 
 const CombinedEditorImportPlugin = preload("combined_editor_import_plugin.gd")
+const HOT_RELOAD_AUTOLOAD_NAME := "ImportalityHotReload"
+const HOT_RELOAD_AUTOLOAD_PATH := "res://addons/nklbdev.importality/runtime/importality_hot_reload.gd"
 
 var __editor_import_plugins: Array[EditorImportPlugin]
 var __image_format_loader_extensions: Array[ImageFormatLoaderExtension]
@@ -62,6 +64,12 @@ func _enter_tree() -> void:
 			setting.register(editor_settings)
 		__image_format_loader_extensions.push_back(image_format_loader_extension)
 		image_format_loader_extension.add_format_loader()
+
+func _enable_plugin() -> void:
+	add_autoload_singleton(HOT_RELOAD_AUTOLOAD_NAME, HOT_RELOAD_AUTOLOAD_PATH)
+
+func _disable_plugin() -> void:
+	remove_autoload_singleton(HOT_RELOAD_AUTOLOAD_NAME)
 
 func _exit_tree() -> void:
 	for editor_import_plugin in __editor_import_plugins:
