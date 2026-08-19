@@ -50,8 +50,7 @@ func _import(
 	) -> Error:
 	var error: Error
 
-	var export_result: _Exporter.ExportResult = \
-		__exporter.export(res_source_file_path, options, self)
+	var export_result: _Exporter.ExportResult = __exporter.export(res_source_file_path, options, self)
 	if export_result.error:
 		push_error("Export is failed. Errors chain:\n%s" % [export_result])
 		return export_result.error
@@ -73,12 +72,7 @@ func _import(
 		if not __is_script_inherited_from(middle_import_script, _MiddleImportScript):
 			push_error("The script specified as middle import script is not inherited from external_scripts/middle_import_script_base.gd: %s" % [middle_import_script_path])
 			return ERR_INVALID_DECLARATION
-		error = middle_import_script.modify_context(
-			res_source_file_path,
-			res_save_file_path,
-			self,
-			options,
-			middle_import_script_context)
+		error = middle_import_script.modify_context(res_source_file_path, res_save_file_path, self, options, middle_import_script_context)
 		if error:
 			push_error("Failed to perform middle-import-script")
 			return error
@@ -88,8 +82,6 @@ func _import(
 			return error
 
 	var portable_compressed_texture := PortableCompressedTexture2D.new()
-	# Keep the compressed source buffer alive. Without this, importer-created
-	# SpriteFrames can appear valid in-memory but fail to persist/reload later.
 	portable_compressed_texture.set_keep_compressed_buffer(true)
 	portable_compressed_texture.create_from_image(
 		middle_import_script_context.atlas_image,
@@ -107,11 +99,13 @@ func _import(
 		push_error("Import is failed. Errors chain:\n%s" % [import_result])
 		return import_result.error
 
-	# Exporters may attach source-format metadata to the result. Keep that data
-	# on the imported Godot resource without making Importality understand the
-	# format-specific schema.
-	for meta_key: StringName in export_result.metadata.keys():
-		import_result.resource.set_meta(meta_key, export_result.metadata[meta_key])
+	# Optional exporters may expose format-specific resource metadata without
+	# forcing Importality to understand that schema.
+	if __exporter.has_method("get_import_metadata"):
+		var metadata: Variant = __exporter.get_import_metadata(res_source_file_path)
+		if metadata is Dictionary:
+			for meta_key: Variant in metadata.keys():
+				import_result.resource.set_meta(StringName(str(meta_key)), metadata[meta_key])
 
 	var post_import_script_context: _PostImportScript.Context = _PostImportScript.Context.new()
 	post_import_script_context.resource = import_result.resource
@@ -145,8 +139,7 @@ func _import(
 			push_error("Failed to add gen files from post-import-script context")
 			return error
 
-	var save_flags: ResourceSaver.SaverFlags = \
-		post_import_script_context.resource_saver_flags | ResourceSaver.FLAG_BUNDLE_RESOURCES
+	var save_flags: ResourceSaver.SaverFlags = post_import_script_context.resource_saver_flags | ResourceSaver.FLAG_BUNDLE_RESOURCES
 	error = ResourceSaver.save(
 		post_import_script_context.resource,
 		"%s.%s" % [res_save_file_path, post_import_script_context.save_extension],
@@ -161,58 +154,32 @@ func _import(
 		return ERR_FILE_CANT_WRITE
 	return OK
 
-func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]:
-	return __options
-
+func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]: return __options
 func _get_option_visibility(path: String, option_name: StringName, options: Dictionary) -> bool:
-	if __options_visibility_checkers.has(option_name):
-		return __options_visibility_checkers[option_name].call(options)
+	if __options_visibility_checkers.has(option_name): return __options_visibility_checkers[option_name].call(options)
 	return true
-
-func _get_import_order() -> int:
-	return __import_order
-
-func _get_importer_name() -> String:
-	return __importer_name
-
-func _get_preset_count() -> int:
-	return 1
-
-func _get_preset_name(preset_index: int) -> String:
-	return "Default"
-
-func _get_priority() -> float:
-	return __priority
-
-func _get_recognized_extensions() -> PackedStringArray:
-	return __exporter.get_recognized_extensions()
-
-func _get_resource_type() -> String:
-	return __importer.get_resource_type()
-
-func _get_save_extension() -> String:
-	return __importer.get_save_extension()
-
-func _get_visible_name() -> String:
-	return __visible_name
+func _get_import_order() -> int: return __import_order
+func _get_importer_name() -> String: return __importer_name
+func _get_preset_count() -> int: return 1
+func _get_preset_name(preset_index: int) -> String: return "Default"
+func _get_priority() -> float: return __priority
+func _get_recognized_extensions() -> PackedStringArray: return __exporter.get_recognized_extensions()
+func _get_resource_type() -> String: return __importer.get_resource_type()
+func _get_save_extension() -> String: return __importer.get_save_extension()
+func _get_visible_name() -> String: return __visible_name
 
 func __is_script_inherited_from(script: Script, base_script: Script) -> bool:
 	while script != null:
-		if script == base_script:
-			return true
+		if script == base_script: return true
 		script = script.get_base_script()
 	return false
 
 func __append_gen_files(gen_files: PackedStringArray, gen_files_to_add: PackedStringArray) -> Error:
 	for gen_file_path in gen_files_to_add:
 		gen_file_path = gen_file_path.strip_edges()
-		if gen_files.has(gen_file_path):
-			continue
-		if not gen_file_path.is_absolute_path():
-			push_error("Gen-file-path is not valid path: %s" % [gen_file_path])
-			return ERR_FILE_BAD_PATH
-		if not gen_file_path.begins_with("res://"):
-			push_error("Gen-file-path is not a resource file system path (res://): %s" % [gen_file_path])
+		if gen_files.has(gen_file_path): continue
+		if not gen_file_path.is_absolute_path() or not gen_file_path.begins_with("res://"):
+			push_error("Gen-file-path is not a valid res:// path: %s" % [gen_file_path])
 			return ERR_FILE_BAD_PATH
 		if not FileAccess.file_exists(gen_file_path):
 			push_error("The file at the gen-file-path was not found: %s" % [gen_file_path])
