@@ -30,9 +30,6 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not enabled:
 		return
-	# Godot marks projects launched from the editor with the `editor` feature,
-	# while exported projects do not receive it. This keeps the development
-	# watcher out of shipped builds even if the autoload remains configured.
 	if not OS.has_feature("editor"):
 		enabled = false
 		return
@@ -63,6 +60,7 @@ func watch(path: String) -> void:
 	if signature.is_empty():
 		return
 	_files[path] = signature
+	_files[path]["hash"] = _file_hash(path)
 
 func unwatch(path: String) -> void:
 	_files.erase(path)
@@ -77,7 +75,10 @@ func reload(path: String) -> bool:
 		ResourceLoader.CACHE_MODE_REPLACE,
 	)
 	if loaded is SpriteFrames:
-		_files[path] = _signature(path)
+		var signature := _signature(path)
+		if not signature.is_empty():
+			signature["hash"] = _file_hash(path)
+			_files[path] = signature
 		_pending.erase(path)
 		asset_reloaded.emit(path, loaded)
 		return true
@@ -139,7 +140,6 @@ func _poll() -> void:
 		if reload(path):
 			print("[Importality] Hot-reloaded %s" % path)
 		else:
-			# Keep trying until the writer finishes producing a valid bundle.
 			push_warning("[Importality] Hot-reload deferred for %s; keeping previous resource." % path)
 
 func _discover_files() -> void:
