@@ -1,0 +1,257 @@
+name: Krita Layers regression
+
+on:
+  push:
+    branches:
+      - feat/krita-layers
+  pull_request:
+    paths:
+      - ".github/workflows/krita-layers-ci.yml"
+      - "addons/nklbdev.importality/**"
+      - "tools/krita_plugin/**"
+      - "tools/run_krita_plugin_ci.ps1"
+      - "tests/**"
+      - "README.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: importality-krita-layers-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: "4.7.1-stable"
+
+jobs:
+  contract-and-godot:
+    name: Contract + Godot importer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      XDG_DATA_HOME: ${{ runner.temp }}/importality-krita-userdata
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile Python tests
+        run: python -m py_compile tests/validate_kritalayers.py tests/kritalayers_contract_smoke.py tests/generate_kritalayers_fixture.py
+
+      - name: Run standalone contract smoke
+        run: python tests/kritalayers_contract_smoke.py
+
+      - name: Restore Godot cache
+        uses: actions/cache@v4
+        with:
+          path: .ci-godot
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Prepare Godot
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p .ci-godot "$XDG_DATA_HOME"
+          godot_bin="$PWD/.ci-godot/Godot_v${GODOT_VERSION}_linux.x86_64"
+          if [[ ! -x "$godot_bin" ]]; then
+            curl --fail --location --retry 3 \
+              --output .ci-godot/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+            unzip -qo .ci-godot/godot.zip -d .ci-godot
+            chmod +x "$godot_bin"
+            rm -f .ci-godot/godot.zip
+          fi
+          printf 'GODOT_BIN=%s\n' "$godot_bin" >> "$GITHUB_ENV"
+          "$godot_bin" --version
+
+      - name: Assemble disposable Godot test project
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p tests/godot_project/addons tests/godot_project/fixtures
+          cp -a addons/nklbdev.importality tests/godot_project/addons/
+          python tests/generate_kritalayers_fixture.py tests/godot_project/fixtures/contract.kritalayers
+          python tests/validate_kritalayers.py tests/godot_project/fixtures/contract.kritalayers
+
+      - name: Import project twice
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          timeout 300s "$GODOT_BIN" --headless --path tests/godot_project --editor --quit-after 2 \
+            2>&1 | tee godot-import-first.log
+          timeout 300s "$GODOT_BIN" --headless --path tests/godot_project --editor --quit-after 2 \
+            2>&1 | tee godot-import-second.log
+
+      - name: Run generic Importality E2E smoke
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          timeout 120s "$GODOT_BIN" --headless --path tests/godot_project \
+            --script res://importality_smoke.gd \
+            2>&1 | tee godot-smoke.log
+
+      - name: Upload Linux diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: importality-godot-smoke
+          path: |
+            godot-import-first.log
+            godot-import-second.log
+            godot-smoke.log
+            tests/godot_project/fixtures/*.res
+            tests/godot_project/fixtures/*.tres
+          if-no-files-found: ignore
+
+  real-krita-windows:
+    name: Real Krita exporter (Windows self-hosted)
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify interactive runner
+        shell: pwsh
+        run: |
+          if (-not [Environment]::UserInteractive) {
+            throw "Real Krita CI requires an interactive Windows session, not service session 0."
+          }
+
+      - name: Verify Krita installation
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "$env:ProgramFiles\Krita (x64)\bin\krita.exe",
+            "$env:ProgramFiles\Krita\bin\krita.exe",
+            "$env:LOCALAPPDATA\Programs\Krita\bin\krita.exe"
+          ) | Where-Object { Test-Path -LiteralPath $_ }
+          if ($candidates.Count -eq 0 -and -not (Get-Command krita.exe -ErrorAction SilentlyContinue)) {
+            throw "Krita is not installed or not available on PATH."
+          }
+
+      - name: Compile Krita plugin
+        shell: pwsh
+        run: |
+          python -m py_compile `
+            tools/krita_plugin/importality_krita_layers/importality_krita_layers.py `
+            tools/krita_plugin/importality_krita_layers/visibility_rules_adapter.py `
+            tools/krita_plugin/importality_krita_ci/importality_krita_ci.py
+
+      - name: Run real Krita exporter smoke
+        shell: pwsh
+        run: .\tools\run_krita_plugin_ci.ps1 -KeepArtifacts
+
+      - name: Validate real artifact again outside Krita
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check --quiet --no-input pip 2>$null
+          python tools/run_validate_real_bundle.py
+
+      - name: Upload real Krita artifact and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: importality-real-kritalayers
+          path: |
+            .ci-local/krita-runtime/**
+          if-no-files-found: ignore
+
+      - name: Clean generated state
+        if: always()
+        shell: pwsh
+        run: |
+          Remove-Item -Force -Recurse -LiteralPath .ci-local\krita-runtime -ErrorAction SilentlyContinue
+
+  real-krita-godot:
+    name: Real Krita bundle -> Importality -> SpriteFrames
+    needs: real-krita-windows
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 20
+    env:
+      XDG_DATA_HOME: ${{ runner.temp }}/importality-real-e2e-userdata
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Restore Godot cache
+        uses: actions/cache@v4
+        with:
+          path: .ci-godot
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: Prepare Godot
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p .ci-godot "$XDG_DATA_HOME"
+          godot_bin="$PWD/.ci-godot/Godot_v${GODOT_VERSION}_linux.x86_64"
+          if [[ ! -x "$godot_bin" ]]; then
+            curl --fail --location --retry 3 \
+              --output .ci-godot/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+            unzip -qo .ci-godot/godot.zip -d .ci-godot
+            chmod +x "$godot_bin"
+            rm -f .ci-godot/godot.zip
+          fi
+          printf 'GODOT_BIN=%s\n' "$godot_bin" >> "$GITHUB_ENV"
+          "$godot_bin" --version
+
+      - name: Download real Krita artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: importality-real-kritalayers
+          path: .ci-artifact
+
+      - name: Assemble Godot test project with the real bundle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf tests/godot_project/addons tests/godot_project/fixtures/*.kritalayers tests/godot_project/.godot
+          mkdir -p tests/godot_project/addons tests/godot_project/fixtures
+          cp -a addons/nklbdev.importality tests/godot_project/addons/
+          bundle="$(find .ci-artifact -type f -name 'Importality_Krita_CI_Test.kritalayers' -print -quit)"
+          test -n "$bundle"
+          cp -- "$bundle" tests/godot_project/fixtures/contract.kritalayers
+          python tests/validate_kritalayers.py tests/godot_project/fixtures/contract.kritalayers
+
+      - name: Reimport the real Krita bundle twice
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          timeout 300s "$GODOT_BIN" --headless --path tests/godot_project --editor --quit-after 2 \
+            2>&1 | tee real-krita-import-first.log
+          timeout 300s "$GODOT_BIN" --headless --path tests/godot_project --editor --quit-after 2 \
+            2>&1 | tee real-krita-import-second.log
+
+      - name: Run real Krita -> Godot importer smoke
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          timeout 120s "$GODOT_BIN" --headless --path tests/godot_project \
+            --script res://importality_smoke.gd \
+            2>&1 | tee real-krita-godot-smoke.log
+
+      - name: Upload real E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: importality-real-godot-e2e
+          path: |
+            .ci-artifact/**
+            real-krita-import-first.log
+            real-krita-import-second.log
+            real-krita-godot-smoke.log
+            tests/godot_project/fixtures/*.res
+            tests/godot_project/fixtures/*.tres
+          if-no-files-found: ignore
+
+      - name: Clean generated state
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .ci-artifact tests/godot_project/.godot tests/godot_project/fixtures/*.kritalayers tests/godot_project/fixtures/*.res tests/godot_project/fixtures/*.tres
