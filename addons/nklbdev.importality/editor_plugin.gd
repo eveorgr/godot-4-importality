@@ -5,13 +5,14 @@ const ExporterBase = preload("export/_.gd")
 const EXPORTERS_SCRIPTS: Array[GDScript] = [
 	preload("export/aseprite.gd"),
 	preload("export/krita.gd"),
+	preload("export/krita_layers.gd"),
 	preload("export/pencil2d.gd"),
 	preload("export/piskel.gd"),
 	preload("export/pixelorama.gd"),
 ]
 
 const ImporterBase = preload("import/_.gd")
-const IMPORTERS_SCRIPTS: Array[GDScript] = [
+const IMPORTERS_SCRIPTS: Array[GDScript> = [
 	preload("import/animated_sprite_2d.gd"),
 	preload("import/animated_sprite_3d.gd"),
 	preload("import/sprite_2d_with_animation_player.gd"),
@@ -41,23 +42,22 @@ func _enter_tree() -> void:
 		for setting in exporter.get_settings():
 			setting.register(editor_settings)
 		exporters.push_back(exporter)
-		var image_format_loader_extension: ImageFormatLoaderExtension = \
-			exporter.get_image_format_loader_extension()
+		var image_format_loader_extension: ImageFormatLoaderExtension = exporter.get_image_format_loader_extension()
 		if image_format_loader_extension:
 			__image_format_loader_extensions.push_back(image_format_loader_extension)
 			image_format_loader_extension.add_format_loader()
+
 	var importers: Array[ImporterBase]
 	for Importer in IMPORTERS_SCRIPTS:
 		importers.push_back(Importer.new())
 	for exporter in exporters:
 		for importer in importers:
-			var editor_import_plugin: EditorImportPlugin = \
-				CombinedEditorImportPlugin.new(exporter, importer)
+			var editor_import_plugin: EditorImportPlugin = CombinedEditorImportPlugin.new(exporter, importer)
 			__editor_import_plugins.push_back(editor_import_plugin)
 			add_import_plugin(editor_import_plugin)
+
 	for Extension in STANDALONE_IMAGE_FORMAT_LOADER_EXTENSIONS:
-		var image_format_loader_extension: StandaloneImageFormatLoaderExtension = \
-			Extension.new() as StandaloneImageFormatLoaderExtension
+		var image_format_loader_extension: StandaloneImageFormatLoaderExtension = Extension.new() as StandaloneImageFormatLoaderExtension
 		for setting in image_format_loader_extension.get_settings():
 			setting.register(editor_settings)
 		__image_format_loader_extensions.push_back(image_format_loader_extension)
