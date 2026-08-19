@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=importality_krita_layers
+X-Python-2-Compatible=false
+Name=Importality Krita Layers
+Comment=Export configurable layered Krita artwork as Importality .kritalayers bundles.
