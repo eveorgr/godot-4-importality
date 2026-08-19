@@ -61,15 +61,12 @@ func _import(
 	middle_import_script_context.sprite_sheet = export_result.sprite_sheet
 	middle_import_script_context.animation_library = export_result.animation_library
 
-
-	# -------- MIDDLE IMPORT BEGIN --------
 	var middle_import_script_path: String = options[_Options.MIDDLE_IMPORT_SCRIPT_PATH].strip_edges()
 	if middle_import_script_path:
 		if not (middle_import_script_path.begins_with("res://") or middle_import_script_path.begins_with("uid://")):
 			push_error("Middle import script path is not valid: %s" % [middle_import_script_path])
 			return ERR_FILE_BAD_PATH
-		var middle_import_script: Script = ResourceLoader \
-			.load(middle_import_script_path, "Script") as Script
+		var middle_import_script: Script = ResourceLoader.load(middle_import_script_path, "Script") as Script
 		if middle_import_script == null:
 			push_error("Failed to load middle import script: %s" % [middle_import_script_path])
 			return ERR_FILE_CORRUPT
@@ -89,16 +86,19 @@ func _import(
 		if error:
 			push_error("Failed to add gen files from middle-import-script context")
 			return error
-	# -------- MIDDLE IMPORT END --------
 
+	var portable_compressed_texture := PortableCompressedTexture2D.new()
+	# Keep the compressed source buffer alive. Without this, importer-created
+	# SpriteFrames can appear valid in-memory but fail to persist/reload later.
+	portable_compressed_texture.set_keep_compressed_buffer(true)
+	portable_compressed_texture.create_from_image(
+		middle_import_script_context.atlas_image,
+		PortableCompressedTexture2D.COMPRESSION_MODE_LOSSLESS,
+	)
 
-
-	var portableCompressedTexture: PortableCompressedTexture2D = PortableCompressedTexture2D.new()
-	portableCompressedTexture.create_from_image(middle_import_script_context.atlas_image, PortableCompressedTexture2D.COMPRESSION_MODE_LOSSLESS)
-	
 	var import_result: _Importer.ImportResult = __importer.import(
 		res_source_file_path,
-		portableCompressedTexture,
+		portable_compressed_texture,
 		middle_import_script_context.sprite_sheet,
 		middle_import_script_context.animation_library,
 		options,
@@ -107,21 +107,23 @@ func _import(
 		push_error("Import is failed. Errors chain:\n%s" % [import_result])
 		return import_result.error
 
+	# Exporters may attach source-format metadata to the result. Keep that data
+	# on the imported Godot resource without making Importality understand the
+	# format-specific schema.
+	for meta_key: StringName in export_result.metadata.keys():
+		import_result.resource.set_meta(meta_key, export_result.metadata[meta_key])
+
 	var post_import_script_context: _PostImportScript.Context = _PostImportScript.Context.new()
 	post_import_script_context.resource = import_result.resource
 	post_import_script_context.resource_saver_flags = import_result.resource_saver_flags
 	post_import_script_context.save_extension = _get_save_extension()
 
-
-
-	# -------- POST IMPORT BEGIN --------
 	var post_import_script_path: String = options[_Options.POST_IMPORT_SCRIPT_PATH].strip_edges()
 	if post_import_script_path:
 		if not (post_import_script_path.begins_with("res://") or post_import_script_path.begins_with("uid://")):
 			push_error("Post import script path is not valid: %s" % [post_import_script_path])
 			return ERR_FILE_BAD_PATH
-		var post_import_script: Script = ResourceLoader \
-			.load(post_import_script_path, "Script") as Script
+		var post_import_script: Script = ResourceLoader.load(post_import_script_path, "Script") as Script
 		if post_import_script == null:
 			push_error("Failed to load post import script: %s" % [post_import_script_path])
 			return ERR_FILE_CORRUPT
@@ -142,16 +144,22 @@ func _import(
 		if error:
 			push_error("Failed to add gen files from post-import-script context")
 			return error
-	# -------- POST IMPORT END --------
 
-
+	var save_flags: ResourceSaver.SaverFlags = \
+		post_import_script_context.resource_saver_flags | ResourceSaver.FLAG_BUNDLE_RESOURCES
 	error = ResourceSaver.save(
 		post_import_script_context.resource,
 		"%s.%s" % [res_save_file_path, post_import_script_context.save_extension],
-		post_import_script_context.resource_saver_flags)
+		save_flags)
 	if error:
-		push_error("Failed to save the new resource via ResourceSaver")
-	return error
+		push_error("Failed to save the new resource via ResourceSaver: %s (%s)" % [error_string(error), error])
+		return error
+
+	var output_path := "%s.%s" % [res_save_file_path, post_import_script_context.save_extension]
+	if not FileAccess.file_exists(output_path):
+		push_error("Importer reported success but did not create %s" % output_path)
+		return ERR_FILE_CANT_WRITE
+	return OK
 
 func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]:
 	return __options
