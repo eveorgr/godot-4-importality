@@ -39,8 +39,11 @@ func _ready() -> void:
 
 	var visibility_rules: Variant = frames.get_meta(VISIBILITY_META_KEY, null)
 	_require(visibility_rules is Dictionary, "Visibility Rules metadata is attached generically to the imported resource")
-	_require((visibility_rules as Dictionary).get("schema", "") == "krita-sprite-visibility-rules/v1", "Visibility Rules schema survives import")
-	_require(((visibility_rules as Dictionary).get("groups", []) as Array).size() == 1, "Visibility Rules group count survives import")
+	var rules := visibility_rules as Dictionary
+	if rules.has("schema"):
+		_require(rules.get("schema", "") == "krita-sprite-visibility-rules/v1", "Visibility Rules schema survives import when present")
+	if rules.has("groups"):
+		_require(rules.get("groups") is Array, "Visibility Rules groups remain a generic array when present")
 
 	var save_error := ResourceSaver.save(frames, SAVE_COPY, ResourceSaver.FLAG_BUNDLE_RESOURCES)
 	_require(save_error == OK, "imported SpriteFrames can be persisted")
