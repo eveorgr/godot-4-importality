@@ -40,10 +40,10 @@ function Get-ProcessTreeIds {
     while ($changed) {
         $changed = $false
         foreach ($proc in $all) {
-            $pid = [int]$proc.ProcessId
+            $processId = [int]$proc.ProcessId
             $parent = [int]$proc.ParentProcessId
-            if ($ids.Contains($parent) -and -not $ids.Contains($pid)) {
-                [void]$ids.Add($pid)
+            if ($ids.Contains($parent) -and -not $ids.Contains($processId)) {
+                [void]$ids.Add($processId)
                 $changed = $true
             }
         }
@@ -54,8 +54,8 @@ function Get-ProcessTreeIds {
 function Stop-ProcessTree {
     param([int]$RootPid)
     if ($RootPid -eq 0) { return }
-    foreach ($pid in @(Get-ProcessTreeIds -RootPid $RootPid | Sort-Object -Descending)) {
-        try { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } catch { }
+    foreach ($processId in @(Get-ProcessTreeIds -RootPid $RootPid | Sort-Object -Descending)) {
+        try { Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue } catch { }
     }
 }
 
