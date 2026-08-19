@@ -65,11 +65,17 @@ func _enter_tree() -> void:
 		__image_format_loader_extensions.push_back(image_format_loader_extension)
 		image_format_loader_extension.add_format_loader()
 
+	_ensure_hot_reload_autoload()
+
 func _enable_plugin() -> void:
-	add_autoload_singleton(HOT_RELOAD_AUTOLOAD_NAME, HOT_RELOAD_AUTOLOAD_PATH)
+	_ensure_hot_reload_autoload()
 
 func _disable_plugin() -> void:
 	remove_autoload_singleton(HOT_RELOAD_AUTOLOAD_NAME)
+
+func _ensure_hot_reload_autoload() -> void:
+	if not ProjectSettings.has_setting("autoload/" + HOT_RELOAD_AUTOLOAD_NAME):
+		add_autoload_singleton(HOT_RELOAD_AUTOLOAD_NAME, HOT_RELOAD_AUTOLOAD_PATH)
 
 func _exit_tree() -> void:
 	for editor_import_plugin in __editor_import_plugins:
