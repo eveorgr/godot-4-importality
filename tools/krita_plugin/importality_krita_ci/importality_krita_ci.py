@@ -38,8 +38,7 @@ def _project_root() -> Path:
     value = os.environ.get("IMPORTALITY_KRITA_CI_PROJECT_ROOT", "").strip()
     if not value:
         raise RuntimeError("IMPORTALITY_KRITA_CI_PROJECT_ROOT is not set")
-    root = Path(value).resolve()
-    return root
+    return Path(value).resolve()
 
 
 def _result_path() -> Path:
@@ -78,7 +77,7 @@ def _find_target_plugin() -> Path:
     candidates = []
     if resource_root:
         candidates.append(Path(resource_root) / "pykrita" / PLUGIN_NAME)
-    candidates.append(Path(__file__).resolve().parents[1] / PLUGIN_NAME)
+    candidates.append(Path(__file__).resolve().parents[1] / "importality_krita_layers")
     for candidate in candidates:
         if (candidate / "importality_krita_layers.py").is_file():
             return candidate
@@ -174,7 +173,7 @@ def _run() -> None:
     status, error, details, doc = "passed", None, {}, None
     try:
         _log(f"CI extension loaded in Krita {Krita.instance().version()} using {QT_BINDING}")
-        _project_root()
+        project_root = _project_root()
         result_path = _result_path()
         plugin_dir = _find_target_plugin()
         sys.path.insert(0, str(plugin_dir.parent))
@@ -184,7 +183,7 @@ def _run() -> None:
         _assert(Krita.instance().action("importality_export_kritalayers") is not None, "Importality export action was not registered")
         _log("Importality Krita Layers plugin loaded and action registered")
 
-        ci_dir = _project_root() / ".ci-local" / "krita-runtime"
+        ci_dir = project_root / ".ci-local" / "krita-runtime"
         ci_dir.mkdir(parents=True, exist_ok=True)
         kra_path = ci_dir / "Importality_Krita_CI_Test.kra"
         bundle_path = ci_dir / "Importality_Krita_CI_Test.kritalayers"
