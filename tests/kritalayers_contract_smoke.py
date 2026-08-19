@@ -122,7 +122,7 @@ def main() -> int:
         bad_hash = copy.deepcopy(base)
         bad_hash["slots"][0]["variants"][0]["frames"][0]["sha256"] = "0" * 64
         bad_hash_path = root / "bad-hash.kritalayers"
-        _write_bundle(bad_hash, bad_hash, frame, files)
+        _write_bundle(bad_hash_path, bad_hash, frame, files)
         _expect(any("SHA-256 mismatch" in error for error in validate(bad_hash_path)), "corrupt frame hash is rejected")
 
         unsafe = copy.deepcopy(base)
@@ -133,8 +133,8 @@ def main() -> int:
 
         collision = copy.deepcopy(base)
         collision["slots"][0]["variants"].append(copy.deepcopy(collision["slots"][0]["variants"][0]))
-        collision["slots"][0]["variants"][-1]["name"] = "base-"
-        collision["slots"][0]["variants"][-1]["raw_name"] = "base-"
+        collision["slots"][0]["variants"][-1]["name"] = "BASE"
+        collision["slots"][0]["variants"][-1]["raw_name"] = "BASE"
         collision["slots"][0]["variants"][-1]["default"] = False
         collision_path = root / "normalized-collision.kritalayers"
         _write_bundle(collision_path, collision, frame, files)
