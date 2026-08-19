@@ -23,7 +23,7 @@ const IMPORTERS_SCRIPTS: Array[GDScript] = [
 ]
 
 const StandaloneImageFormatLoaderExtension = preload("standalone_image_format_loader_extension.gd")
-const STANDALONE_IMAGE_FORMAT_LOADER_EXTENSIONS: Array[GDScript> = [
+const STANDALONE_IMAGE_FORMAT_LOADER_EXTENSIONS: Array[GDScript] = [
 	preload("command_line_image_format_loader_extension.gd")
 ]
 
