@@ -64,13 +64,15 @@ Every frame is protected by SHA-256 metadata and the importer validates archive 
 
 ### Visibility Rules
 
-When the source `.kra` contains the public annotation used by [Krita Sprite Visibility Rules](https://github.com/EvelynLimaB/krita-sprite-visibility-rules), the Krita exporter carries the rules into the `.kritalayers` manifest.
+When the source `.kra` contains the public annotation used by [Krita Sprite Visibility Rules](https://github.com/EvelynLimaB/krita-sprite-visibility-rules), the Krita exporter carries the rules into the `.kritalayers` manifest under the generic `visibility_rules` field.
 
-Importality treats them as **generic source metadata**. The imported resource stores the data under:
+Importality treats the rules as **generic source metadata**. On the imported Godot resource, the data is stored under the identifier-safe metadata key:
 
 ```text
-importality.krita.layers.visibility_rules
+importality_krita_layers_visibility_rules
 ```
+
+The Godot metadata key intentionally uses only identifier characters because `Object.set_meta()` requires metadata names to be valid identifiers. The richer `visibility_rules` namespace remains part of the `.kritalayers` manifest itself.
 
 A runtime consumer can choose to interpret that metadata. This keeps the Importality core independent from the rule engine and avoids coupling the extension to B42.
 
