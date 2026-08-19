@@ -12,7 +12,7 @@ const EXPORTERS_SCRIPTS: Array[GDScript] = [
 ]
 
 const ImporterBase = preload("import/_.gd")
-const IMPORTERS_SCRIPTS: Array[GDScript> = [
+const IMPORTERS_SCRIPTS: Array[GDScript] = [
 	preload("import/animated_sprite_2d.gd"),
 	preload("import/animated_sprite_3d.gd"),
 	preload("import/sprite_2d_with_animation_player.gd"),
@@ -23,7 +23,7 @@ const IMPORTERS_SCRIPTS: Array[GDScript> = [
 ]
 
 const StandaloneImageFormatLoaderExtension = preload("standalone_image_format_loader_extension.gd")
-const STANDALONE_IMAGE_FORMAT_LOADER_EXTENSIONS: Array[GDScript] = [
+const STANDALONE_IMAGE_FORMAT_LOADER_EXTENSIONS: Array[GDScript> = [
 	preload("command_line_image_format_loader_extension.gd")
 ]
 
