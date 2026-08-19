@@ -27,7 +27,6 @@ class ExportResult:
 	var atlas_image: Image
 	var sprite_sheet: _Common.SpriteSheetInfo
 	var animation_library: _Common.AnimationLibraryInfo
-	var metadata: Dictionary = {}
 	func _get_result_type_description() -> String:
 		return "Export"
 	func success(
@@ -111,7 +110,9 @@ func export(
 	options: Dictionary,
 	editor_import_plugin: EditorImportPlugin
 	) -> ExportResult:
-	return _export(res_source_file_path, options)
+	return _export(
+		res_source_file_path,
+		options)
 
 func _export(source_file: String, options: Dictionary) -> ExportResult:
 	assert(false, "This method is abstract and must be overriden.")
@@ -139,6 +140,7 @@ class LayerParamsParsingResult:
 static func _parse_layer_params(raw_params: String) -> LayerParamsParsingResult:
 	var result = LayerParamsParsingResult.new()
 	result.canvas_offset = Vector2i.ZERO
+	# Prepend a space so options at the start of the string are matched by the regex
 	var padded: String = " " + raw_params.strip_edges()
 	var options_matches: Array[RegExMatch] = __option_regex.search_all(padded)
 	var first_match_position: int = padded.length()
@@ -151,12 +153,15 @@ static func _parse_layer_params(raw_params: String) -> LayerParamsParsingResult:
 		match raw_option.substr(0, 3):
 			"-o:":
 				var parts: PackedStringArray = raw_value.split(",")
-				if parts.size() == 2 and __integer_regex.search(parts[0]) and __integer_regex.search(parts[1]):
+				if parts.size() == 2
+						and __integer_regex.search(parts[0])
+						and __integer_regex.search(parts[1]):
 					result.canvas_offset = Vector2i(parts[0].to_int(), parts[1].to_int())
 				else:
-					result.fail(ERR_INVALID_DATA, "Wrong value format for layer canvas offset. Expected 'x,y' integers, got: \"%s\"" % [raw_value])
+					result.fail(ERR_INVALID_DATA,
+						"Wrong value format for layer canvas offset. Expected 'x,y' integers, got: \"%s\"" % [raw_value])
 					return result
-			_: pass
+			_: pass # Ignore unknown parameters
 	result.name = padded.left(first_match_position).strip_edges()
 	return result
 
@@ -170,7 +175,12 @@ class AnimationParamsParsingResult:
 	func _get_result_type_description() -> String:
 		return "Animation parameters parsing"
 
-static func _parse_animation_params(raw_animation_params: String, animation_options: AnimationOptions, first_frame_index: int, frames_count: int = 0) -> AnimationParamsParsingResult:
+static func _parse_animation_params(
+	raw_animation_params: String,
+	animation_options: AnimationOptions,
+	first_frame_index: int,
+	frames_count: int = 0
+	) -> AnimationParamsParsingResult:
 	var result = AnimationParamsParsingResult.new()
 	if first_frame_index < 0:
 		result.fail(ERR_INVALID_DATA, "Wrong value for animation first frame index. Expected natural number, got: %s" % [first_frame_index])
@@ -193,27 +203,31 @@ static func _parse_animation_params(raw_animation_params: String, animation_opti
 			"-f:":
 				if animation_options & AnimationOptions.FramesCount:
 					if result.frames_count == 0:
-						if __natural_number_regex.search(raw_value): result.frames_count = raw_value.to_int()
+						if __natural_number_regex.search(raw_value):
+							result.frames_count = raw_value.to_int()
 						if result.frames_count <= 0:
 							result.fail(ERR_INVALID_DATA, "Wrong value format for frames count. Expected positive integer number, got: \"%s\"" % [raw_value])
 							return result
 			"-d:":
-				if animation_options & AnimationOptions.Direction and result.direction < 0:
-					match raw_value:
-						"f": result.direction = _Common.AnimationDirection.FORWARD
-						"r": result.direction = _Common.AnimationDirection.REVERSE
-						"pp": result.direction = _Common.AnimationDirection.PING_PONG
-						"ppr": result.direction = _Common.AnimationDirection.PING_PONG_REVERSE
-						_: 
-							result.fail(ERR_INVALID_DATA, "Wrong value format for animation direction. Expected one of: [\"f\", \"r\", \"pp\", \"ppr\"], got: \"%s\"" % [raw_value])
-							return result
+				if animation_options & AnimationOptions.Direction:
+					if  result.direction < 0:
+						match raw_value:
+							"f": result.direction = _Common.AnimationDirection.FORWARD
+							"r": result.direction = _Common.AnimationDirection.REVERSE
+							"pp": result.direction = _Common.AnimationDirection.PING_PONG
+							"ppr": result.direction = _Common.AnimationDirection.PING_PONG_REVERSE
+							_:
+								result.fail(ERR_INVALID_DATA, "Wrong value format for animation direction. Expected one of: [\"f\", \"r\", \"pp\", \"ppr\"], got: \"%s\"" % [raw_value])
+								return result
 			"-r:":
-				if animation_options & AnimationOptions.RepeatCount and result.repeat_count < 0:
-					if __natural_number_regex.search(raw_value): result.repeat_count = raw_value.to_int()
-					else:
-						result.fail(ERR_INVALID_DATA, "Wrong value format for repeat count. Expected positive integer number or zero, got: \"%s\"" % [raw_value])
-						return result
-			_: pass
+				if animation_options & AnimationOptions.RepeatCount:
+					if result.repeat_count < 0:
+						if __natural_number_regex.search(raw_value):
+							result.repeat_count = raw_value.to_int()
+						else:
+							result.fail(ERR_INVALID_DATA, "Wrong value format for repeat count. Expected positive integer number or zero, got: \"%s\"" % [raw_value])
+							return result
+			_: pass # Ignore unknown parameter
 	result.name = raw_animation_params.left(first_match_position).strip_edges()
 	if result.frames_count <= 0:
 		result.fail(ERR_UNCONFIGURED, "Animation frames count is required but not specified")
@@ -222,10 +236,16 @@ static func _parse_animation_params(raw_animation_params: String, animation_opti
 
 static func _create_sprite_sheet_builder(options: Dictionary) -> _SpriteSheetBuilderBase:
 	var sprite_sheet_layout: _Common.SpriteSheetLayout = options[_Options.SPRITE_SHEET_LAYOUT]
-	return _PackedSpriteSheetBuilder.new(options[_Options.EDGES_ARTIFACTS_AVOIDANCE_METHOD], options[_Options.SPRITES_SURROUNDING_COLOR]) \
-	if sprite_sheet_layout == _Common.SpriteSheetLayout.PACKED else _GridBasedSpriteSheetBuilder.new(
+	return \
+	_PackedSpriteSheetBuilder.new(
 		options[_Options.EDGES_ARTIFACTS_AVOIDANCE_METHOD],
-		_GridBasedSpriteSheetBuilder.StripDirection.HORIZONTAL,
+		options[_Options.SPRITES_SURROUNDING_COLOR]) \
+	if sprite_sheet_layout == _Common.SpriteSheetLayout.PACKED else \
+	_GridBasedSpriteSheetBuilder.new(
+		options[_Options.EDGES_ARTIFACTS_AVOIDANCE_METHOD],
+			_GridBasedSpriteSheetBuilder.StripDirection.HORIZONTAL
+			if sprite_sheet_layout == _Common.SpriteSheetLayout.HORIZONTAL_STRIPS else
+			_GridBasedSpriteSheetBuilder.StripDirection.HORIZONTAL,
 		options[_Options.MAX_CELLS_IN_STRIP],
 		options[_Options.TRIM_SPRITES_TO_OVERALL_MIN_SIZE],
 		options[_Options.COLLAPSE_TRANSPARENT_SPRITES],
