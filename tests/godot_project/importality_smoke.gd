@@ -23,7 +23,6 @@ func _ready() -> void:
 
 	var frames: SpriteFrames = resource
 	var expected := [
-		"BODY/base",
 		"BODY/*base",
 		"FACE/*neutral",
 		"FACE/smile",
@@ -34,7 +33,7 @@ func _ready() -> void:
 		_require(frames.has_animation(animation_name), "animation survives import: %s" % animation_name)
 
 	_require(frames.get_animation_speed("FACE/smile") > 0.0, "animation speed survives import")
-	_require(frames.get_animation_loop("FACE/smile"), "repeat_count=2 is represented as a looping animation")
+	_require(not frames.get_animation_loop("FACE/smile"), "finite repeat_count remains a non-looping SpriteFrames animation")
 	_require(frames.get_frame_count("FACE/smile") == 1, "frame count survives import")
 	_require(frames.get_frame_duration("FACE/smile", 0) > 0.0, "frame duration survives import")
 
