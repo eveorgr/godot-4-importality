@@ -130,9 +130,7 @@ This separation makes the same `.kritalayers` asset reusable in other Godot proj
 
 ## CI and validation
 
-The extension is designed to be testable with the real external application rather than only mocked fixtures.
-
-The B42 development branch established the following real pipeline:
+The B42 development branch established the original real pipeline:
 
 ```text
 Krita 5.x
@@ -143,7 +141,40 @@ Krita 5.x
   -> B42 semantic resolution
 ```
 
-The fork is intended to carry those real-runtime tests forward as Importality-level regression tests, while keeping B42-specific tests in the B42 project.
+The generic portion now lives in this Importality fork as a regression suite. It deliberately stops at the generic resource boundary; B42 remains responsible for consumer-specific behavior.
+
+The fork's CI is split into three layers:
+
+```text
+1. Contract tests
+   synthetic bundles
+   schema / path / SHA-256 / naming / metadata checks
+
+2. Real Krita exporter
+   Windows self-hosted
+   real Krita
+   real Importality Krita plugin
+   real .kra -> .kritalayers artifact
+
+3. Real Godot importer
+   Linux self-hosted
+   real .kritalayers artifact
+   real Importality importer
+   SpriteFrames assertions
+   Visibility Rules metadata
+   persistence / reload
+```
+
+The B42 project keeps the downstream checks instead:
+
+```text
+Importality asset
+  -> B42LayeredPortrait
+  -> semantic state resolution
+  -> Dialogic integration
+```
+
+The real Windows and Linux jobs intentionally use self-hosted runners because Krita is a desktop application and the exporter test needs an interactive Krita session. The disposable Linux project copies the add-on into a tiny Godot project so the test exercises the actual Importality plugin rather than a mocked importer.
 
 ## Current scope and next evolution
 
