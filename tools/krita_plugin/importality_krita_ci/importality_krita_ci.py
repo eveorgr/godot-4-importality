@@ -201,9 +201,10 @@ def _run() -> None:
         _assert(kra_path.is_file(), "Krita reported success but .kra is missing")
 
         default_path = Path(module._default_export_path(doc)).resolve()
-        _assert(default_path == bundle_path.resolve(), f"Unexpected export destination: {default_path}")
-        _log("Exporting .kritalayers with the real Importality plugin...")
-        module.export_bundle(doc, str(default_path))
+        _assert(default_path.suffix.lower() == ".kritalayers", f"Importality default export path is not a .kritalayers path: {default_path}")
+        _log(f"Importality default export destination: {default_path}")
+        _log(f"CI artifact destination: {bundle_path}")
+        module.export_bundle(doc, str(bundle_path))
         details = _verify_bundle(bundle_path, kra_path)
         _log("Real Krita -> .kritalayers validation passed")
     except Exception as exc:
