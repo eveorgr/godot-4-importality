@@ -148,9 +148,7 @@ jobs:
 
       - name: Validate real artifact again outside Krita
         shell: pwsh
-        run: |
-          python -m pip install --disable-pip-version-check --quiet --no-input pip 2>$null
-          python tools/run_validate_real_bundle.py
+        run: python tools/run_validate_real_bundle.py
 
       - name: Upload real Krita artifact and diagnostics
         if: always()
