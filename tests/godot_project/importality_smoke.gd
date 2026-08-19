@@ -2,7 +2,9 @@ extends SceneTree
 
 const BUNDLE := "res://fixtures/contract.kritalayers"
 const SAVE_COPY := "res://fixtures/reloaded_copy.tres"
-const VISIBILITY_META_KEY := &"importality.krita.layers.visibility_rules"
+# Godot Object metadata names must be valid identifiers; the manifest keeps
+# the source metadata under its richer `visibility_rules` field.
+const VISIBILITY_META_KEY := &"importality_krita_layers_visibility_rules"
 
 func _fail(message: String) -> void:
 	push_error("[FAIL] " + message)
