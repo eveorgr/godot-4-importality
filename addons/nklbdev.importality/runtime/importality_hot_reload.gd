@@ -30,7 +30,9 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not enabled:
 		return
-	if not OS.has_feature("editor"):
+	# The editor binary sets no `template` feature. Export templates do.
+	# This keeps the development watcher out of shipped builds.
+	if OS.has_feature("template"):
 		enabled = false
 		return
 
