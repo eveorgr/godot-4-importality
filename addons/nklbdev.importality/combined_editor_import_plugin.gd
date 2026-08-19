@@ -50,8 +50,7 @@ func _import(
 	) -> Error:
 	var error: Error
 
-	var export_result: _Exporter.ExportResult = \
-		__exporter.export(res_source_file_path, options, self)
+	var export_result: _Exporter.ExportResult = __exporter.export(res_source_file_path, options, self)
 	if export_result.error:
 		push_error("Export is failed. Errors chain:\n%s" % [export_result])
 		return export_result.error
@@ -61,27 +60,19 @@ func _import(
 	middle_import_script_context.sprite_sheet = export_result.sprite_sheet
 	middle_import_script_context.animation_library = export_result.animation_library
 
-
-	# -------- MIDDLE IMPORT BEGIN --------
 	var middle_import_script_path: String = options[_Options.MIDDLE_IMPORT_SCRIPT_PATH].strip_edges()
 	if middle_import_script_path:
 		if not (middle_import_script_path.begins_with("res://") or middle_import_script_path.begins_with("uid://")):
 			push_error("Middle import script path is not valid: %s" % [middle_import_script_path])
 			return ERR_FILE_BAD_PATH
-		var middle_import_script: Script = ResourceLoader \
-			.load(middle_import_script_path, "Script") as Script
+		var middle_import_script: Script = ResourceLoader.load(middle_import_script_path, "Script") as Script
 		if middle_import_script == null:
 			push_error("Failed to load middle import script: %s" % [middle_import_script_path])
 			return ERR_FILE_CORRUPT
 		if not __is_script_inherited_from(middle_import_script, _MiddleImportScript):
 			push_error("The script specified as middle import script is not inherited from external_scripts/middle_import_script_base.gd: %s" % [middle_import_script_path])
 			return ERR_INVALID_DECLARATION
-		error = middle_import_script.modify_context(
-			res_source_file_path,
-			res_save_file_path,
-			self,
-			options,
-			middle_import_script_context)
+		error = middle_import_script.modify_context(res_source_file_path, res_save_file_path, self, options, middle_import_script_context)
 		if error:
 			push_error("Failed to perform middle-import-script")
 			return error
@@ -89,16 +80,17 @@ func _import(
 		if error:
 			push_error("Failed to add gen files from middle-import-script context")
 			return error
-	# -------- MIDDLE IMPORT END --------
 
+	var portable_compressed_texture := PortableCompressedTexture2D.new()
+	portable_compressed_texture.set_keep_compressed_buffer(true)
+	portable_compressed_texture.create_from_image(
+		middle_import_script_context.atlas_image,
+		PortableCompressedTexture2D.COMPRESSION_MODE_LOSSLESS,
+	)
 
-
-	var portableCompressedTexture: PortableCompressedTexture2D = PortableCompressedTexture2D.new()
-	portableCompressedTexture.create_from_image(middle_import_script_context.atlas_image, PortableCompressedTexture2D.COMPRESSION_MODE_LOSSLESS)
-	
 	var import_result: _Importer.ImportResult = __importer.import(
 		res_source_file_path,
-		portableCompressedTexture,
+		portable_compressed_texture,
 		middle_import_script_context.sprite_sheet,
 		middle_import_script_context.animation_library,
 		options,
@@ -107,21 +99,25 @@ func _import(
 		push_error("Import is failed. Errors chain:\n%s" % [import_result])
 		return import_result.error
 
+	# Optional exporters may expose format-specific resource metadata without
+	# forcing Importality to understand that schema.
+	if __exporter.has_method("get_import_metadata"):
+		var metadata: Variant = __exporter.get_import_metadata(res_source_file_path)
+		if metadata is Dictionary:
+			for meta_key: Variant in metadata.keys():
+				import_result.resource.set_meta(StringName(str(meta_key)), metadata[meta_key])
+
 	var post_import_script_context: _PostImportScript.Context = _PostImportScript.Context.new()
 	post_import_script_context.resource = import_result.resource
 	post_import_script_context.resource_saver_flags = import_result.resource_saver_flags
 	post_import_script_context.save_extension = _get_save_extension()
 
-
-
-	# -------- POST IMPORT BEGIN --------
 	var post_import_script_path: String = options[_Options.POST_IMPORT_SCRIPT_PATH].strip_edges()
 	if post_import_script_path:
 		if not (post_import_script_path.begins_with("res://") or post_import_script_path.begins_with("uid://")):
 			push_error("Post import script path is not valid: %s" % [post_import_script_path])
 			return ERR_FILE_BAD_PATH
-		var post_import_script: Script = ResourceLoader \
-			.load(post_import_script_path, "Script") as Script
+		var post_import_script: Script = ResourceLoader.load(post_import_script_path, "Script") as Script
 		if post_import_script == null:
 			push_error("Failed to load post import script: %s" % [post_import_script_path])
 			return ERR_FILE_CORRUPT
@@ -142,69 +138,48 @@ func _import(
 		if error:
 			push_error("Failed to add gen files from post-import-script context")
 			return error
-	# -------- POST IMPORT END --------
 
-
+	var save_flags: ResourceSaver.SaverFlags = post_import_script_context.resource_saver_flags | ResourceSaver.FLAG_BUNDLE_RESOURCES
 	error = ResourceSaver.save(
 		post_import_script_context.resource,
 		"%s.%s" % [res_save_file_path, post_import_script_context.save_extension],
-		post_import_script_context.resource_saver_flags)
+		save_flags)
 	if error:
-		push_error("Failed to save the new resource via ResourceSaver")
-	return error
+		push_error("Failed to save the new resource via ResourceSaver: %s (%s)" % [error_string(error), error])
+		return error
 
-func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]:
-	return __options
+	var output_path := "%s.%s" % [res_save_file_path, post_import_script_context.save_extension]
+	if not FileAccess.file_exists(output_path):
+		push_error("Importer reported success but did not create %s" % output_path)
+		return ERR_FILE_CANT_WRITE
+	return OK
 
+func _get_import_options(path: String, preset_index: int) -> Array[Dictionary]: return __options
 func _get_option_visibility(path: String, option_name: StringName, options: Dictionary) -> bool:
-	if __options_visibility_checkers.has(option_name):
-		return __options_visibility_checkers[option_name].call(options)
+	if __options_visibility_checkers.has(option_name): return __options_visibility_checkers[option_name].call(options)
 	return true
-
-func _get_import_order() -> int:
-	return __import_order
-
-func _get_importer_name() -> String:
-	return __importer_name
-
-func _get_preset_count() -> int:
-	return 1
-
-func _get_preset_name(preset_index: int) -> String:
-	return "Default"
-
-func _get_priority() -> float:
-	return __priority
-
-func _get_recognized_extensions() -> PackedStringArray:
-	return __exporter.get_recognized_extensions()
-
-func _get_resource_type() -> String:
-	return __importer.get_resource_type()
-
-func _get_save_extension() -> String:
-	return __importer.get_save_extension()
-
-func _get_visible_name() -> String:
-	return __visible_name
+func _get_import_order() -> int: return __import_order
+func _get_importer_name() -> String: return __importer_name
+func _get_preset_count() -> int: return 1
+func _get_preset_name(preset_index: int) -> String: return "Default"
+func _get_priority() -> float: return __priority
+func _get_recognized_extensions() -> PackedStringArray: return __exporter.get_recognized_extensions()
+func _get_resource_type() -> String: return __importer.get_resource_type()
+func _get_save_extension() -> String: return __importer.get_save_extension()
+func _get_visible_name() -> String: return __visible_name
 
 func __is_script_inherited_from(script: Script, base_script: Script) -> bool:
 	while script != null:
-		if script == base_script:
-			return true
+		if script == base_script: return true
 		script = script.get_base_script()
 	return false
 
 func __append_gen_files(gen_files: PackedStringArray, gen_files_to_add: PackedStringArray) -> Error:
 	for gen_file_path in gen_files_to_add:
 		gen_file_path = gen_file_path.strip_edges()
-		if gen_files.has(gen_file_path):
-			continue
-		if not gen_file_path.is_absolute_path():
-			push_error("Gen-file-path is not valid path: %s" % [gen_file_path])
-			return ERR_FILE_BAD_PATH
-		if not gen_file_path.begins_with("res://"):
-			push_error("Gen-file-path is not a resource file system path (res://): %s" % [gen_file_path])
+		if gen_files.has(gen_file_path): continue
+		if not gen_file_path.is_absolute_path() or not gen_file_path.begins_with("res://"):
+			push_error("Gen-file-path is not a valid res:// path: %s" % [gen_file_path])
 			return ERR_FILE_BAD_PATH
 		if not FileAccess.file_exists(gen_file_path):
 			push_error("The file at the gen-file-path was not found: %s" % [gen_file_path])

@@ -1,96 +1,206 @@
 # Importality
 
 [![en](https://img.shields.io/badge/lang-en-red.svg)](README.md)
-[![en](https://img.shields.io/badge/lang-ru-green.svg)](README.ru.md)
+[![ru](https://img.shields.io/badge/lang-ru-green.svg)](README.ru.md)
 
-![art for repo 2](https://github.com/nklbdev/godot-4-importality/assets/7024016/f44d98b1-116c-493e-8108-2138b1bddd61)
+**Importality is a Godot add-on for turning layered graphics authored in external tools into reusable Godot resources.**
 
-**Importality - is an add-on for [Godot](https://godotengine.org) engine for importing graphics and animations from popular formats.**
+This repository is a maintained fork of [nklbdev/godot-4-importality](https://github.com/nklbdev/godot-4-importality). The fork keeps the upstream architecture and importers while adding a first-class **Krita Layers** intermediate format for projects that need semantic layered artwork rather than a single flattened image.
 
-## 📜 Table of contents
+## Goals
 
-- [Introduction](#-introduction)
-- [Features](#-features)
-- [How to install](#-how-to-install)
-- [How to use](#-how-to-use)
-- [How to help the project](#-how-to-help-the-project)
+The fork is intended to keep the boundary between **authoring**, **import**, and **runtime consumers** clean:
 
-## 📝 Introduction
+```text
+Krita / another authoring tool
+        |
+        |  export
+        v
+  .kritalayers
+        |
+        |  Importality
+        v
+  Godot resource
+        |
+        +--> B42
+        +--> Dialogic 2
+        +--> another game/project
+        +--> custom runtime code
+```
 
-I previously published an [add-on for importing Aseprite files](https://github.com/nklbdev/godot-4-aseprite-importers). After that, I started developing a similar add-on for importing Krita files. During the development process, these projects turned out to have a lot in common, and I decided to combine them into one. Importality contains scripts for exporting data from source files to a common internal format, and scripts for importing data from an internal format into Godot resources. After that, I decide to add new export scripts for other graphic applications.
+Importality does not depend on B42, Dialogic, or any particular game architecture. B42 is one consumer of the imported data, not part of the importer.
 
-<p align="center">
-<a href="http://www.youtube.com/watch?feature=player_embedded&v=tlfhlQPr_IA" target="_blank">
-<img src="http://img.youtube.com/vi/tlfhlQPr_IA/hqdefault.jpg" alt="Watch the demo video" />
-</a>
-</p>
+The long-term design is intentionally flexible: an artwork source may contain one asset or many, and the export definition is intended to describe how the source maps to logical slots and variants without forcing every project into the same character/portrait layout. The current v2 authoring path uses the explicit `@export` convention described below.
 
-## 🎯 Features
+## Krita Layers v2
 
-- Adding recognition of source graphic files as images to Godot with all the standard features for importing them (for animated files, only the first frame will be imported).
-- Support for Aseprite (and LibreSprite), Krita, Pencil2D, Piskel and Pixelorama files. Other formats may be supported in the future.
-- Import files as:
-     - Atlas of sprites (sprite sheet) - texture with metadata;
-     - `SpriteFrames` resource to create your own `AnimatedSprite2D` and `AnimatedSprite3D` based on it;
-     - `PackedScene`'s with ready-to-use `Node`'s:
-         - `AnimatedSprite2D` and `AnimatedSprite3D`
-         - `Sprite2D`, `Sprite3D` and `TextureRect` animated with `AnimationPlayer`
-- Several artifacts avoiding methods on the edges of sprites.
-- Grid-based and packaged layout options for sprite sheets.
-- Several node animation strategies with `AnimationPlayer`.
-- Importing any other graphics formats as regular images with external command line utilities.
+The new `importality.krita.layers/v2` bundle is a ZIP-based intermediate format containing:
 
-## 🥁 Upcoming updates by [voting Reddit users](https://www.reddit.com/r/godot/comments/160hnuj/what_features_should_i_add_to_importality_first)
+- `manifest.json` describing the canvas, slots, variants, playback and integrity metadata;
+- full-canvas PNG frames;
+- optional source metadata, including Visibility Rules imported from the Krita Sprite Visibility Rules plugin.
 
-1. [Layers names filters (for layers visibility overriding)](https://github.com/nklbdev/godot-4-importality/issues/11)
-1. [Linux and MacOS scripts to run Krita as different user](https://github.com/nklbdev/godot-4-importality/issues/6) (to resolve import hanging while Krita instance is running)
-1. Something else (what?) - users are undecided
-1. [New target resource-types](https://github.com/nklbdev/godot-4-importality/issues/14)
-1. [More flexible definition of borders around sprites](https://github.com/nklbdev/godot-4-importality/issues/12)
-1. [Ability to specify normal-map layer name](https://github.com/nklbdev/godot-4-importality/issues/9)
+Each exported slot is a direct child of a top-level `@export` group. The current convention is intentionally small:
 
-## 💽 How to install
+```text
+@export
+├── BODY
+│   └── *base
+├── FACE
+│   ├── *neutral
+│   ├── smile
+│   └── tired
+├── HAIR
+│   ├── *normal
+│   └── disheveled
+└── +DETAILS
+    ├── *none
+    └── cut_face
+```
 
-1. Install it from [Godot Asset Library](https://godotengine.org/asset-library/asset/2025) or:
-    - Clone this repository or download its contents as an archive.
-    - Place the contents of the `addons` folder of the repository into the `addons` folder of your project.
-1. Adjust the settings in `Editor Settings` -> `Importality`
-     - [Specify a directory for temporary files](https://github.com/nklbdev/godot-4-importality/wiki/about-temporary-files-and-ram_drives-(en)).
-     - Specify the command and its parameters to launch your editor in data export mode, if necessary. How to configure settings for your graphical application, see the corresponding article on the [wiki](https://github.com/nklbdev/godot-4-importality/wiki).
+`*` marks a default variant. `+` marks an additive slot. Names are semantic identifiers; the importer preserves the authored names in the generated `SpriteFrames` animations.
 
-## 👷 How to use
+Every frame is protected by SHA-256 metadata and the importer validates archive paths, canvas dimensions, logical-name collisions, playback data and frame hashes before creating the Godot resource.
 
-**Be sure to read the wiki article about the editor you are using! These articles describe the important nuances of configuring the integration!**
-- [Aseprite/LibreSprite](https://github.com/nklbdev/godot-4-importality/wiki/exporting-data-from-aseprite-(en)) (Important)
-- [Krita](https://github.com/nklbdev/godot-4-importality/wiki/exporting-data-from-krita-(en)) (**Critical!**)
-- [Pencil2D](https://github.com/nklbdev/godot-4-importality/wiki/exporting-data-from-pencil_2d-(en)) (Important)
-- [Piskel](https://github.com/nklbdev/godot-4-importality/wiki/exporting-data-from-piskel-(en)) (No integration with the application. The plugin uses its own source file parser)
-- [Pixelorama](https://github.com/nklbdev/godot-4-importality/wiki/exporting-data-from-pixelorama-(en)) (No integration with the application. The plugin uses its own source file parser)
-- [Other graphics formats](https://github.com/nklbdev/godot-4-importality/wiki/importing-as-regular-images-(en)) (Important)
+### Visibility Rules
 
-Then:
+When the source `.kra` contains the public annotation used by [Krita Sprite Visibility Rules](https://github.com/EvelynLimaB/krita-sprite-visibility-rules), the Krita exporter carries the rules into the `.kritalayers` manifest under the generic `visibility_rules` field.
 
-1. Save the files of your favorite graphics editor to the Godot project folder.
-1. Select them in the Godot file system tree. They are already imported as a `Texture2D` resource.
-1. Select the import method you want in the "Import" panel.
-1. Customize its settings.
-1. If necessary, save your settings as a default preset for this import method.
-1. Click the "Reimport" button (you may need to restart the engine).
-1. In the future, if you change the source files, Godot will automatically repeat the import.
+Importality treats the rules as **generic source metadata**. On the imported Godot resource, the data is stored under the identifier-safe metadata key:
 
-## 💪 How to help the project
+```text
+importality_krita_layers_visibility_rules
+```
 
-If you know how another graphics format works, or how to use the CLI of another application, graphics and animation from which can be imported in this way - please offer your help in any way. It could be:
+The Godot metadata key intentionally uses only identifier characters because `Object.set_meta()` requires metadata names to be valid identifiers. The richer `visibility_rules` namespace remains part of the `.kritalayers` manifest itself.
 
-- An [issue](https://github.com/nklbdev/godot-4-importality/issues) describing the bug, problem, or improvement for the add-on. (Please attach screenshots and other data to help reproduce your issue.)
-- Textual description of the format or CLI operation.
-- [Pull request](https://github.com/nklbdev/godot-4-importality/pulls) with new exporter.
-- A temporary or permanent license for paid software to be able to study it and create an exporter. For example for:
-     - [Adobe Photoshop](https://www.adobe.com/products/photoshop.html)
-     - [Adobe Animate](https://www.adobe.com/products/animate.html)
-     - [Adobe Character Animator](https://www.adobe.com/products/character-animator.html)
-     - [Affinity Photo](https://affinity.serif.com/photo)
-     - [Moho Debut](https://moho.lostmarble.com/products/moho-debut) / [Moho Pro](https://moho.lostmarble.com/products/moho-pro)
-     - [Toon Boom Harmony](https://www.toonboom.com/products/harmony)
-     - [PyxelEdit](https://pyxeledit.com)
-     - and others
+A runtime consumer can choose to interpret that metadata. This keeps the Importality core independent from the rule engine and avoids coupling the extension to B42.
+
+The integration preserves the rule schema and source node identifiers rather than copying the Krita plugin's implementation.
+
+## Installation
+
+### Godot
+
+Install the add-on from this repository by copying the contents of `addons/` into your Godot project's `addons/` directory, or install the published upstream Importality and use this fork when you need the Krita Layers extension.
+
+Enable **Importality** in `Project > Project Settings > Plugins`.
+
+### Krita
+
+Install the contents of:
+
+```text
+ tools/krita_plugin/
+```
+
+as a Krita Python plugin, then restart Krita.
+
+The plugin adds:
+
+```text
+Tools
+→ Scripts
+→ Importality: Export .kritalayers
+```
+
+Save the `.kra` before exporting. When the source document is inside a Godot project, the default destination is:
+
+```text
+assets/importality/<source-name>.kritalayers
+```
+
+The export is written atomically so a failed export does not replace a previously valid bundle.
+
+## Godot usage
+
+Once a `.kritalayers` file is inside the project, Importality exposes it through its normal importer pipeline. For the `SpriteFrames` target, the resulting resource can be loaded normally:
+
+```gdscript
+var frames: SpriteFrames = load("res://assets/importality/belle.kritalayers")
+```
+
+The same imported resource can be consumed by a custom layered-asset controller, a visual-novel portrait, an `AnimatedSprite2D`, or another system. Importality itself does not decide what the slots mean at runtime.
+
+## B42 and Dialogic 2
+
+B42's `B42LayeredPortrait` is one consumer of this extension. It resolves B42-specific semantic states and slot behavior on top of the generic `SpriteFrames` resource.
+
+Dialogic 2 can continue to use a custom portrait scene and pass state/extra data to B42. Dialogic is therefore an optional integration layer, not an Importality dependency.
+
+This separation makes the same `.kritalayers` asset reusable in other Godot projects that do not use B42 or Dialogic.
+
+## CI and validation
+
+The B42 development branch established the original real pipeline:
+
+```text
+Krita 5.x
+  -> real .kra
+  -> real .kritalayers v2
+  -> Godot Importality importer
+  -> SpriteFrames
+  -> B42 semantic resolution
+```
+
+The generic portion now lives in this Importality fork as a regression suite. It deliberately stops at the generic resource boundary; B42 remains responsible for consumer-specific behavior.
+
+The fork's CI is split into three layers:
+
+```text
+1. Contract tests
+   synthetic bundles
+   schema / path / SHA-256 / naming / metadata checks
+
+2. Real Krita exporter
+   Windows self-hosted
+   real Krita
+   real Importality Krita plugin
+   real .kra -> .kritalayers artifact
+
+3. Real Godot importer
+   Linux self-hosted
+   real .kritalayers artifact
+   real Importality importer
+   SpriteFrames assertions
+   Visibility Rules metadata
+   persistence / reload
+```
+
+The B42 project keeps the downstream checks instead:
+
+```text
+Importality asset
+  -> B42LayeredPortrait
+  -> semantic state resolution
+  -> Dialogic integration
+```
+
+The real Windows and Linux jobs intentionally use self-hosted runners because Krita is a desktop application and the exporter test needs an interactive Krita session. The disposable Linux project copies the add-on into a tiny Godot project so the test exercises the actual Importality plugin rather than a mocked importer.
+
+## Current scope and next evolution
+
+The v2 exporter currently uses the explicit `@export` convention and exports one logical asset bundle per source document. The format and importer are deliberately structured so a future export-definition layer can support arbitrary source organization and multiple logical assets from a single `.kra` without changing the Godot-side resource contract.
+
+That future definition layer is where projects can choose between:
+
+- one source file per asset;
+- many assets in one source file;
+- characters, creatures, items, backgrounds, UI and other layered graphics in the same project.
+
+The importer is not intended to force a portrait-specific hierarchy.
+
+## Upstream
+
+This fork follows the upstream Importality project:
+
+```text
+upstream: https://github.com/nklbdev/godot-4-importality
+fork:     https://github.com/eveorgr/godot-4-importality
+```
+
+Changes that are generally useful to Importality can be proposed upstream; B42-specific behavior should remain in the B42 consumer.
+
+## License
+
+Importality remains distributed under the upstream project's license. This fork adds the Krita Layers extension and its supporting tooling while keeping the upstream attribution.

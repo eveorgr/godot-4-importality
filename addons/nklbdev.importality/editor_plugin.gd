@@ -5,6 +5,7 @@ const ExporterBase = preload("export/_.gd")
 const EXPORTERS_SCRIPTS: Array[GDScript] = [
 	preload("export/aseprite.gd"),
 	preload("export/krita.gd"),
+	preload("export/krita_layers.gd"),
 	preload("export/pencil2d.gd"),
 	preload("export/piskel.gd"),
 	preload("export/pixelorama.gd"),
@@ -27,6 +28,8 @@ const STANDALONE_IMAGE_FORMAT_LOADER_EXTENSIONS: Array[GDScript] = [
 ]
 
 const CombinedEditorImportPlugin = preload("combined_editor_import_plugin.gd")
+const HOT_RELOAD_AUTOLOAD_NAME := "ImportalityHotReload"
+const HOT_RELOAD_AUTOLOAD_PATH := "res://addons/nklbdev.importality/runtime/importality_hot_reload.gd"
 
 var __editor_import_plugins: Array[EditorImportPlugin]
 var __image_format_loader_extensions: Array[ImageFormatLoaderExtension]
@@ -41,27 +44,38 @@ func _enter_tree() -> void:
 		for setting in exporter.get_settings():
 			setting.register(editor_settings)
 		exporters.push_back(exporter)
-		var image_format_loader_extension: ImageFormatLoaderExtension = \
-			exporter.get_image_format_loader_extension()
+		var image_format_loader_extension: ImageFormatLoaderExtension = exporter.get_image_format_loader_extension()
 		if image_format_loader_extension:
 			__image_format_loader_extensions.push_back(image_format_loader_extension)
 			image_format_loader_extension.add_format_loader()
+
 	var importers: Array[ImporterBase]
 	for Importer in IMPORTERS_SCRIPTS:
 		importers.push_back(Importer.new())
 	for exporter in exporters:
 		for importer in importers:
-			var editor_import_plugin: EditorImportPlugin = \
-				CombinedEditorImportPlugin.new(exporter, importer)
+			var editor_import_plugin: EditorImportPlugin = CombinedEditorImportPlugin.new(exporter, importer)
 			__editor_import_plugins.push_back(editor_import_plugin)
 			add_import_plugin(editor_import_plugin)
+
 	for Extension in STANDALONE_IMAGE_FORMAT_LOADER_EXTENSIONS:
-		var image_format_loader_extension: StandaloneImageFormatLoaderExtension = \
-			Extension.new() as StandaloneImageFormatLoaderExtension
+		var image_format_loader_extension: StandaloneImageFormatLoaderExtension = Extension.new() as StandaloneImageFormatLoaderExtension
 		for setting in image_format_loader_extension.get_settings():
 			setting.register(editor_settings)
 		__image_format_loader_extensions.push_back(image_format_loader_extension)
 		image_format_loader_extension.add_format_loader()
+
+	_ensure_hot_reload_autoload()
+
+func _enable_plugin() -> void:
+	_ensure_hot_reload_autoload()
+
+func _disable_plugin() -> void:
+	remove_autoload_singleton(HOT_RELOAD_AUTOLOAD_NAME)
+
+func _ensure_hot_reload_autoload() -> void:
+	if not ProjectSettings.has_setting("autoload/" + HOT_RELOAD_AUTOLOAD_NAME):
+		add_autoload_singleton(HOT_RELOAD_AUTOLOAD_NAME, HOT_RELOAD_AUTOLOAD_PATH)
 
 func _exit_tree() -> void:
 	for editor_import_plugin in __editor_import_plugins:

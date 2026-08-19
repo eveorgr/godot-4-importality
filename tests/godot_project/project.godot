@@ -1,0 +1,18 @@
+; Minimal disposable project used only by Importality CI.
+; The workflow copies addons/nklbdev.importality into this project before import.
+config_version=5
+
+[application]
+config/name="Importality Krita Layers CI"
+run/main_scene=""
+
+[autoload]
+ImportalityHotReload="*res://addons/nklbdev.importality/runtime/importality_hot_reload.gd"
+
+[editor_plugins]
+enabled=PackedStringArray("nklbdev.importality")
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0, 0, 0, 1)

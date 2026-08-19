@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=importality_krita_ci
+X-Python-2-Compatible=false
+Name=Importality Krita CI
+Comment=Run the real Importality Krita Layers exporter smoke test.

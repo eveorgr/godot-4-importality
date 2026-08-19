@@ -153,8 +153,8 @@ static func _parse_layer_params(raw_params: String) -> LayerParamsParsingResult:
 		match raw_option.substr(0, 3):
 			"-o:":
 				var parts: PackedStringArray = raw_value.split(",")
-				if parts.size() == 2 \
-						and __integer_regex.search(parts[0]) \
+				if parts.size() == 2
+						and __integer_regex.search(parts[0])
 						and __integer_regex.search(parts[1]):
 					result.canvas_offset = Vector2i(parts[0].to_int(), parts[1].to_int())
 				else:
